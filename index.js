@@ -215,7 +215,7 @@ function sendToS3(options, directory, target, callback) {
  * sync
  *
  * Performs a mongodump on a specified database, gzips the data,
- * and uploads it to s3.
+ * and uploads it to s3. Cleans up only on successful upload.
  *
  * @param mongodbConfig   mongodb config [host, port, username, password, db]
  * @param s3Config        s3 config [key, secret, bucket]
@@ -234,7 +234,9 @@ function sync(mongodbConfig, s3Config, callback) {
     async.apply(removeRF, path.join(tmpDir, archiveName)),
     async.apply(mongoDump, mongodbConfig, tmpDir),
     async.apply(compressDirectory, tmpDir, mongodbConfig.db, archiveName),
-    async.apply(sendToS3, s3Config, tmpDir, archiveName)
+    async.apply(sendToS3, s3Config, tmpDir, archiveName),
+    async.apply(removeRF, backupDir),
+    async.apply(removeRF, path.join(tmpDir, archiveName))
   ], function(err) {
     if(err) {
       log(err, 'error');
