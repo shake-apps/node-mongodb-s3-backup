@@ -3,32 +3,9 @@
 var exec = require('child_process').exec
   , spawn = require('child_process').spawn
   , path = require('path')
-  , fs = require('fs');
+  , fs = require('fs')
+  , winston = require('winston');
 
-/**
- * log
- *
- * Logs a message to the console with a tag.
- *
- * @param message  the message to log
- * @param tag      (optional) the tag to log with.
- */
-function log(message, tag) {
-  var util = require('util')
-    , color = require('cli-color')
-    , tags, currentTag;
-
-  tag = tag || 'info';
-
-  tags = {
-    error: color.red.bold,
-    warn: color.yellow,
-    info: color.cyanBright
-  };
-
-  currentTag = tags[tag] || function(str) { return str; };
-  util.log((currentTag("[" + tag + "] ") + message).replace(/(\n|\r|\r\n)$/, ''));
-}
 
 /**
  * getArchiveName
@@ -52,7 +29,7 @@ function getArchiveName(databaseName) {
   return datestring.join('_') + '.tar.gz';
 }
 
-/* removeRF
+/** removeRF
  *
  * Remove a file or directory. (Recursive, forced)
  *
@@ -66,7 +43,7 @@ function removeRF(target, callback) {
     if (!exists) {
       return callback(null);
     }
-    log("Removing " + target, 'warn');
+    winston.warn("Removing " + target);
     exec( 'rm -rf ' + target, callback);
   });
 }
@@ -100,20 +77,20 @@ function mongoDump(options, directory, callback) {
     mongoOptions.push(options.password);
   }
 
-  log('Starting mongodump of ' + options.db, 'info');
+  winston.info('Starting mongodump of ' + options.db);
   mongodump = spawn('mongodump', mongoOptions);
 
   mongodump.stdout.on('data', function (data) {
-    log(data);
+    winston.info(String(data).trim());
   });
 
   mongodump.stderr.on('data', function (data) {
-    log(data, 'error');
+    winston.error(String(data).trim());
   });
 
   mongodump.on('exit', function (code) {
     if(code === 0) {
-      log('mongodump executed successfully', 'info');
+      winston.info('mongodump executed successfully');
       callback(null);
     } else {
       callback(new Error("Mongodump exited with code " + code));
@@ -168,18 +145,18 @@ function compressDirectory(directory, input, output, callback) {
     input
   ];
 
-  log('Starting compression of ' + input + ' into ' + output, 'info');
+  winston.info('Starting compression of ' + input + ' into ' + output);
   tar = spawn('tar', tarOptions, { cwd: directory });
 
   tar.stderr.on('data', function (data) {
-    log(data, 'error');
+    winston.error(data);
   });
 
   tar.on('exit', function (code) {
     if(code === 0) {
       fs.stat(path.join(directory, output), function(err, stats) {
         var size = (!err) ? stats.size : 0;
-        log('Successfully compressed directory (' + friendlyFilesize(size) + ')', 'info');
+        winston.info('Successfully compressed directory (' + friendlyFilesize(size) + ')');
         callback(null);
       });
     } else {
@@ -212,7 +189,7 @@ function sendToS3(options, directory, target, callback) {
     bucket: options.bucket
   });
 
-  log('Attemping to upload ' + target + ' to the ' + options.bucket + ' s3 bucket');
+  winston.info('Attemping to upload ' + target + ' to the ' + options.bucket + ' s3 bucket');
   s3client.putFile(sourceFile, path.join(destination, target),  function(err, res){
     if(err) {
       return callback(err);
@@ -222,9 +199,9 @@ function sendToS3(options, directory, target, callback) {
 
     res.on('data', function(chunk){
       if(res.statusCode !== 200) {
-        log(chunk, 'error');
+        winston.error(chunk);
       } else {
-        log(chunk);
+        winston.info(chunk);
       }
     });
 
@@ -232,7 +209,7 @@ function sendToS3(options, directory, target, callback) {
       if (res.statusCode !== 200) {
         return callback(new Error('Expected a 200 response from S3, got ' + res.statusCode));
       }
-      log('Successfully uploaded to s3');
+      winston.info('Successfully uploaded to s3');
       return callback();
     });
   });
@@ -266,12 +243,12 @@ function sync(mongodbConfig, s3Config, callback) {
     async.apply(removeRF, path.join(tmpDir, archiveName))
   ], function(err) {
     if(err) {
-      log(err, 'error');
+      winston.error('Failed during sync: ' + err);
     } else {
-      log('Successfully backed up ' + mongodbConfig.db);
+      winston.info('Successfully backed up ' + mongodbConfig.db);
     }
     return callback(err);
   });
 }
 
-module.exports = { sync: sync, log: log };
+module.exports = { sync: sync };

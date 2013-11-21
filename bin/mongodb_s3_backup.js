@@ -7,6 +7,7 @@ var cli = require('cli')
   , util = require('util')
   , backup = require('../')
   , cronJob = require('cron').CronJob
+  , winston = require('winston')
   , pkg = require('../package.json')
   , crontab = "0 0 * * *"
   , timezone = "America/New_York"
@@ -26,10 +27,14 @@ if(cli.args.length !== 1) {
   return cli.getUsage();
 }
 
+
 /* Configuration */
 
+winston.remove(winston.transports.Console);
+winston.add(winston.transports.Console, {colorize:true, timestamp:true, padLevels:true});
+
 configPath = path.resolve(process.cwd(), cli.args[0]);
-backup.log('Loading config file (' + configPath + ')');
+winston.info('Loading config file (' + configPath + ')');
 config = require(configPath);
 
 if(options.now) {
@@ -50,18 +55,18 @@ if(options.now) {
       try {
         require('time'); // Make sure the user has time installed
       } catch(e) {
-        backup.log(e, "error");
-        backup.log("Module 'time' is not installed by default, install it with `npm install time`", "error");
+        winston.error(e);
+        winston.error("Module 'time' is not installed by default, install it with `npm install time`");
         process.exit(1);
       }
 
       timezone = config.cron.timezone;
-      backup.log('Overriding default timezone with "' + timezone + '"');
+      winston.info('Overriding default timezone with "' + timezone + '"');
     }
   }
 
   new cronJob(crontab, function(){
     backup.sync(config.mongodb, config.s3);
   }, null, true, timezone);
-  backup.log('MongoDB S3 Backup Successfully scheduled (' + crontab + ')');
+  winston.info('MongoDB S3 Backup Successfully scheduled (' + crontab + ')');
 }
