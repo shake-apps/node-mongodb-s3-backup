@@ -2,7 +2,8 @@
 
 var exec = require('child_process').exec
   , spawn = require('child_process').spawn
-  , path = require('path');
+  , path = require('path')
+  , fs = require('fs');
 
 /**
  * log
@@ -59,8 +60,6 @@ function getArchiveName(databaseName) {
  * @param callback     callback(error)
  */
 function removeRF(target, callback) {
-  var fs = require('fs');
-
   callback = callback || function() { };
 
   fs.exists(target, function(exists) {
@@ -123,6 +122,31 @@ function mongoDump(options, directory, callback) {
 }
 
 /**
+ * friendlyFilesize
+ *
+ * Render a "friendly" human-readable version of a file size.
+ *
+ * @param bytes      File size in bytes
+ * @returns {string}
+ */
+var friendlyFilesize = function(bytes) {
+  var precision = 1;
+  if (!bytes) {
+    return '0 B';
+  } else if (bytes < 1<<10) {
+    return bytes + ' B';
+  } else if (bytes < 1<<20) {
+    return (bytes / (1<<10)).toFixed(precision) + ' KiB';
+  } else if (bytes < 1<<30) {
+    return (bytes / (1<<20)).toFixed(precision) + ' MiB';
+  } else if (bytes < 1<<40) {
+    return (bytes / (1<<30)).toFixed(precision) + ' GiB';
+  } else {
+    return (bytes / (1<<40)).toFixed(precision) + ' TiB';
+  }
+};
+
+/**
  * compressDirectory
  *
  * Compressed the directory so we can upload it to S3.
@@ -153,8 +177,11 @@ function compressDirectory(directory, input, output, callback) {
 
   tar.on('exit', function (code) {
     if(code === 0) {
-      log('successfully compress directory', 'info');
-      callback(null);
+      fs.stat(path.join(directory, output), function(err, stats) {
+        var size = (!err) ? stats.size : 0;
+        log('Successfully compressed directory (' + friendlyFilesize(size) + ')', 'info');
+        callback(null);
+      });
     } else {
       callback(new Error("Tar exited with code " + code));
     }
